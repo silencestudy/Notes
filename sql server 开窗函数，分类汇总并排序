@@ -1,0 +1,6 @@
+用一句sql取男同学，女同学中年龄最小的同学的信息
+SELECT * FROM (
+  SELECT *,ROW_NUMBER() OVER(PARTITION BY SEX ORDER BY AGE) AS NUM
+    FROM Student	
+  )A 
+  WHERE NUM=1
