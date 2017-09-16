@@ -1,0 +1,50 @@
+
+1.	增加流程相关表的历史表，将已经审批完的流程数据迁移至历史表。 即----分表
+如：WorkflowInstance 对应增加 WorkflowInstance_History
+         WorkflowTask 对应增加 WorkflowTask_History
+         WorkflowRecord 对应增加 WorkflowRecord_History 
+         ……
+在途流程点击量大，历史数据迁移后，数据量降低，提高的查询及插入效率。
+
+针对已经处理完的流程，在迁移至历史表后，一些查询中需要做修改。
+如：查询流程记录时，需要从_History相关的中关联查询。
+其它的点根据项目再去查看。
+         
+         此方案使用后，需要全面测试整个项目中所有与流程有关的点
+
+2.	将原代码改为存储过程。
+其中：1）将原代码中不会进入的方法，不必要的判断直接去掉。
+     2）将原代码中的循环改为Sql批量Update。
+
+SQL避免使用游标、循环。 
+
+3.	将原代码中与当前页面关联性较低的其它业务逻辑，改为异步调用，主线程只处理必要逻辑。
+如：将刷新甘特图中交付件关联表改为异步调用。
+将刷新甘物图扩展冗余表改为异步调用。
+……具体根据业务逻辑去判断……
+
+                        //更新任务扩展表  存储过程已经写过了                   
+                        System.Threading.ThreadPool.QueueUserWorkItem(o =>
+                        {
+                            try
+                            {
+                                MilestonePlanPresenter.BatchUpdateE2eTaskEX(mPPublish);
+                            }
+                            catch (Exception exception)
+                            {
+                                WriteLog(ProjectFrame.Common.Consts.LogType.Modify, "xxxxxxx完后，异步刷新扩展冗余表,失败---", exception.Message + "," + exception.StackTrace, userid, ip);
+                            }
+                        });
+
+4.	增加冗余表，将多表关联查询的SQL去掉，直接去查冗余表。
+如：同事把甘特图中N个表的关联改为了2，3个表关联……
+
+5.	将数据量大的表，主键设置默认值，在批量插入大量数据时不再插入主键，避免因主键为聚集索引，在插入数据时对表进行处理排序浪费大量时间。 （调整索引）
+如：以Int做为主键的表，可用identity(1,1)实例主键自增
+           以guid为主键的表，可用 newsequentialid() 设置默认值
+
+6.	根据需要，将表中常用于查询条件、排序、groupby的字段增加非聚集索引。另外，定期对表重建索引。（索引碎片过大时，查询效率会降低）
+
+7.	表中尽量不要存储 liuyujing kf6850,liufeng 10033,liuhongyuan kf5435,等这类的数据，查询时若数据量大再使用like 效率会很低。
+
+8.	若视图查询较慢 ，想办法删除select 中的function 及嵌套查询。查询字段太多时，可以只查表的主键，然后写入临时表中，最后根据主键更新临时表。再查询处理后的临时表数据，为较快方案。（经实践十分有效）
